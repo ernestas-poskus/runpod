@@ -9,7 +9,7 @@ provides a type-safe, ergonomic interface for managing Pods, Serverless
 endpoints, templates, network volumes, and more.
 
 > **Notice**: This repository was created because the previous maintainer's repository (`martsokha/runpod`) was deleted and the crate was removed from `crates.io`.
-> This fork is maintained by me to ensure the Rust SDK for RunPod remains actively available. The original crate was developed by https://github.com/pbarker and https://github.com/martsokha.
+> This fork is maintained by me to ensure the Rust SDK for RunPod remains actively available. The original crate was developed by <https://github.com/pbarker> and <https://github.com/martsokha>.
 
 ## Features
 
