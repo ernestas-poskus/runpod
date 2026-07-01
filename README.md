@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
-runpod-sdk = { version = "0.2", features = ["serverless"] }
+runpod-sdk = { version = "0.3", features = ["serverless"] }
 ```
 
 ## Quick Start
@@ -79,10 +79,10 @@ Choose between two TLS implementations:
 
 ```toml
 # Default: rustls-tls (recommended)
-runpod-sdk = { version = "0.2", features = [] }
+runpod-sdk = { version = "0.3", features = [] }
 
 # Alternative: native-tls
-runpod-sdk = { version = "0.2", features = ["native-tls"], default-features = false }
+runpod-sdk = { version = "0.3", features = ["native-tls"], default-features = false }
 ```
 
 ### Tracing Support
@@ -91,7 +91,7 @@ Enable comprehensive logging and tracing via the [`tracing`](https://crates.io/c
 Tracing targets are defined in `lib.rs` for fine-grained control over log output:
 
 ```toml
-runpod-sdk = { version = "0.2", features = ["tracing"] }
+runpod-sdk = { version = "0.3", features = ["tracing"] }
 ```
 
 ## Examples
