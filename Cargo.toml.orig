@@ -1,0 +1,65 @@
+# https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[package]
+name = "runpod-sdk"
+description = "Unofficial Rust SDK for RunPod: deploy and scale GPU workloads with serverless endpoints and on-demand pods"
+readme = "./README.md"
+
+version = "0.2.2"
+rust-version = "1.89"
+edition = "2024"
+license = "MIT"
+publish = true
+
+authors = [
+    "Ernestas Poškus <ernestas.poskus@gmail.com>",
+    "Oleh Martsokha <o.martsokha@gmail.com> (Original author)",
+    "Patrick Barker <https://github.com/pbarker> (Original author)"
+]
+repository = "https://github.com/ernestas-poskus/runpod"
+homepage = "https://github.com/ernestas-poskus/runpod"
+documentation = "https://docs.rs/runpod-sdk"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+## Default features enabled by default
+default = ["rustls-tls", "strum"]
+
+## Enable rustls-tls for HTTPS requests (default)
+rustls-tls = ["reqwest/rustls-tls"]
+## Enable native-tls for HTTPS requests
+native-tls = ["reqwest/native-tls"]
+
+## Enable tracing support for HTTP requests and client operations
+tracing = ["dep:tracing"]
+## Enable string conversions for enums via strum derive macros
+strum = ["dep:strum"]
+## Enable serverless runner support
+serverless = ["dep:serde_json", "dep:pin-project-lite"]
+
+[dependencies]
+# HTTP client
+reqwest = { version = "0.12", features = ["json"], default-features = false }
+pin-project-lite = { version = "0.2", optional = true }
+
+# (De)serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = [], optional = true }
+
+# Observability
+tracing = { version = "0.1", features = [], optional = true }
+
+# Derive macros & utilities
+thiserror = { version = "2.0", features = [] }
+strum = { version = "0.27", features = ["derive"], optional = true }
+derive_builder = { version = "0.20", features = [] }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+
+[[example]]
+name = "run_endpoint"
+required-features = ["serverless"]
