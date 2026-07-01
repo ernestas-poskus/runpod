@@ -8,9 +8,8 @@ A Rust client library for the [Runpod API](https://docs.runpod.io/). This SDK
 provides a type-safe, ergonomic interface for managing Pods, Serverless
 endpoints, templates, network volumes, and more.
 
-This crate is a fork of the original
-[runpod.rs](https://github.com/agentsea/runpod.rs) developed by
-[Patrick Barker](https://github.com/pbarker).
+> **Notice**: This repository was created because the previous maintainer's repository (`martsokha/runpod`) was deleted and the crate was removed from `crates.io`.
+> This fork is maintained by me to ensure the Rust SDK for RunPod remains actively available. The original crate was developed by https://github.com/pbarker and https://github.com/martsokha.
 
 ## Features
 
@@ -88,7 +87,7 @@ runpod-sdk = { version = "0.2", features = ["native-tls"], default-features = fa
 
 ### Tracing Support
 
-Enable comprehensive logging and tracing via the [`tracing`](https://crates.io/crates/tracing) crate. 
+Enable comprehensive logging and tracing via the [`tracing`](https://crates.io/crates/tracing) crate.
 Tracing targets are defined in `lib.rs` for fine-grained control over log output:
 
 ```toml
