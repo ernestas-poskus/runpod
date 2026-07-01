@@ -15,9 +15,9 @@ rust-version = "1.89"
 name = "runpod-sdk"
 version = "0.3.0"
 authors = [
-    "Ernestas Poškus <ernestas.poskus@gmail.com>",
-    "Oleh Martsokha <o.martsokha@gmail.com> (Original author)",
-    "Patrick Barker <https://github.com/pbarker> (Original author)",
+  "Ernestas Poškus <ernestas.poskus@gmail.com>",
+  "Oleh Martsokha <o.martsokha@gmail.com> (Original author)",
+  "Patrick Barker <https://github.com/pbarker> (Original author)",
 ]
 build = false
 publish = true
@@ -35,22 +35,13 @@ repository = "https://github.com/ernestas-poskus/runpod"
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = [
-    "--cfg",
-    "docsrs",
-]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = [
-    "rustls-tls",
-    "strum",
-]
+default = ["rustls-tls", "strum"]
 native-tls = ["reqwest/native-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
-serverless = [
-    "dep:serde_json",
-    "dep:pin-project-lite",
-]
+rustls-tls = ["reqwest/rustls"]
+serverless = ["dep:serde_json", "dep:pin-project-lite"]
 strum = ["dep:strum"]
 tracing = ["dep:tracing"]
 
@@ -80,8 +71,8 @@ version = "0.2"
 optional = true
 
 [dependencies.reqwest]
-version = "0.12"
-features = ["json"]
+version = "0.13"
+features = ["json", "query"]
 default-features = false
 
 [dependencies.serde]
@@ -94,7 +85,7 @@ features = []
 optional = true
 
 [dependencies.strum]
-version = "0.27"
+version = "0.28"
 features = ["derive"]
 optional = true
 
@@ -109,7 +100,4 @@ optional = true
 
 [dev-dependencies.tokio]
 version = "1.0"
-features = [
-    "macros",
-    "rt-multi-thread",
-]
+features = ["macros", "rt-multi-thread"]
