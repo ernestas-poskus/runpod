@@ -48,8 +48,8 @@ pin_project_lite::pin_project! {
 
 enum JobState {
     NotSubmitted,
-    Submitting,
-    Polling,
+    Submitting(Pin<Box<dyn Future<Output = Result<String>> + Send>>),
+    Polling(Pin<Box<dyn Future<Output = Result<(JobStatus, Option<Value>)>> + Send>>),
     Ready(Option<Value>),
     Failed(crate::Error),
 }
@@ -251,17 +251,10 @@ impl Future for ServerlessJob {
 
         match this.state.as_mut().get_mut() {
             JobState::NotSubmitted => {
-                *this.state.get_mut() = JobState::Submitting;
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            JobState::Submitting => {
-                // Submit the job
                 let endpoint_id = Arc::clone(this.endpoint_id);
                 let input = this.input.take().expect("Input should be present");
                 let client = this.client.clone();
-
-                let fut = async move {
+                let sub = Box::pin(async move {
                     #[cfg(feature = "tracing")]
                     tracing::debug!(
                         target: TRACING_TARGET,
@@ -270,11 +263,8 @@ impl Future for ServerlessJob {
                     );
 
                     let path = format!("{}/run", endpoint_id);
-
                     let payload = RunRequest { input };
-
                     let response = client.post_api(&path).json(&payload).send().await?;
-
                     let response = response.error_for_status()?;
                     let run_response: RunResponse = response.json().await?;
 
@@ -287,94 +277,97 @@ impl Future for ServerlessJob {
                     );
 
                     Ok::<_, crate::Error>(run_response.id)
-                };
-
-                let mut pinned = Box::pin(fut);
-                match pinned.as_mut().poll(cx) {
-                    Poll::Ready(Ok(job_id)) => {
-                        *this.job_id = Some(job_id);
-                        *this.state.get_mut() = JobState::Polling;
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
-                    }
-                    Poll::Ready(Err(e)) => {
-                        #[cfg(feature = "tracing")]
-                        tracing::error!(
-                            target: TRACING_TARGET,
-                            endpoint_id = %this.endpoint_id,
-                            error = %e,
-                            "Failed to submit job"
-                        );
-
-                        *this.state.get_mut() = JobState::Failed(e);
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
-                    }
-                    Poll::Pending => Poll::Pending,
-                }
+                });
+                *this.state.get_mut() = JobState::Submitting(sub);
+                cx.waker().wake_by_ref();
+                Poll::Pending
             }
-            JobState::Polling => {
-                // Create a future to fetch the job status
-                let endpoint_id = Arc::clone(this.endpoint_id);
-                let job_id = this.job_id.as_ref().expect("Job ID should be set").clone();
-                let client = this.client.clone();
-
-                let fut = async move {
-                    let path = format!("{}/status/{}", endpoint_id, job_id);
-                    let response = client.get_api(&path).send().await?;
-                    let response = response.error_for_status()?;
-                    let data: Value = response.json().await?;
-                    let response: JobStatusResponse = serde_json::from_value(data)?;
-
-                    Ok::<_, crate::Error>((response.status, response.output))
-                };
-
-                // Pin and poll the future
-                let mut pinned = Box::pin(fut);
-                match pinned.as_mut().poll(cx) {
-                    Poll::Ready(Ok((status, output))) => {
-                        if status.is_final() {
-                            #[cfg(feature = "tracing")]
-                            tracing::info!(
-                                target: TRACING_TARGET,
-                                job_id = ?this.job_id,
-                                status = %status,
-                                "Job reached final state"
-                            );
-
-                            *this.state.get_mut() = JobState::Ready(output);
-                            cx.waker().wake_by_ref();
-                            Poll::Pending
-                        } else {
-                            #[cfg(feature = "tracing")]
-                            tracing::trace!(
-                                target: TRACING_TARGET,
-                                job_id = ?this.job_id,
-                                status = %status,
-                                "Job still in progress, continuing to poll"
-                            );
-
-                            // Still polling, wake up later
-                            cx.waker().wake_by_ref();
-                            Poll::Pending
-                        }
-                    }
-                    Poll::Ready(Err(e)) => {
+            JobState::Submitting(fut) => match fut.as_mut().poll(cx) {
+                Poll::Ready(Ok(job_id)) => {
+                    *this.job_id = Some(job_id.clone());
+                    let endpoint_id = Arc::clone(this.endpoint_id);
+                    let client = this.client.clone();
+                    let poller = Box::pin(async move {
+                        let path = format!("{}/status/{}", endpoint_id, job_id);
+                        let response = client.get_api(&path).send().await?;
+                        let response = response.error_for_status()?;
+                        let data: Value = response.json().await?;
+                        let response: JobStatusResponse = serde_json::from_value(data)?;
+                        Ok::<_, crate::Error>((response.status, response.output))
+                    });
+                    *this.state.get_mut() = JobState::Polling(poller);
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                Poll::Ready(Err(e)) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(
+                        target: TRACING_TARGET,
+                        endpoint_id = %this.endpoint_id,
+                        error = %e,
+                        "Failed to submit job"
+                    );
+                    *this.state.get_mut() = JobState::Failed(e);
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                Poll::Pending => Poll::Pending,
+            },
+            JobState::Polling(fut) => match fut.as_mut().poll(cx) {
+                Poll::Ready(Ok((status, output))) => {
+                    if status.is_final() {
                         #[cfg(feature = "tracing")]
-                        tracing::error!(
+                        tracing::info!(
                             target: TRACING_TARGET,
                             job_id = ?this.job_id,
-                            error = %e,
-                            "Failed to poll job status"
+                            status = %status,
+                            "Job reached final state"
                         );
 
-                        *this.state.get_mut() = JobState::Failed(e);
+                        *this.state.get_mut() = JobState::Ready(output);
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    } else {
+                        #[cfg(feature = "tracing")]
+                        tracing::trace!(
+                            target: TRACING_TARGET,
+                            job_id = ?this.job_id,
+                            status = %status,
+                            "Job still in progress, continuing to poll"
+                        );
+
+                        let endpoint_id = Arc::clone(this.endpoint_id);
+                        let client = this.client.clone();
+                        let job_id = this.job_id.as_ref().expect("Job ID must be set").clone();
+                        let poller = Box::pin(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            let path = format!("{}/status/{}", endpoint_id, job_id);
+                            let response = client.get_api(&path).send().await?;
+                            let response = response.error_for_status()?;
+                            let data: Value = response.json().await?;
+                            let response: JobStatusResponse = serde_json::from_value(data)?;
+                            Ok::<_, crate::Error>((response.status, response.output))
+                        });
+                        *this.state.get_mut() = JobState::Polling(poller);
                         cx.waker().wake_by_ref();
                         Poll::Pending
                     }
-                    Poll::Pending => Poll::Pending,
                 }
-            }
+                Poll::Ready(Err(e)) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(
+                        target: TRACING_TARGET,
+                        job_id = ?this.job_id,
+                        error = %e,
+                        "Failed to poll job status"
+                    );
+
+                    *this.state.get_mut() = JobState::Failed(e);
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                Poll::Pending => Poll::Pending,
+            },
             JobState::Ready(output) => {
                 let output = output.take();
                 match output {

@@ -83,6 +83,11 @@ path = "tests/volumes_tests.rs"
 name = "billing_tests"
 path = "tests/billing_tests.rs"
 
+[[test]]
+name = "serverless_endpoint_tests"
+path = "tests/serverless_endpoint_tests.rs"
+required-features = ["serverless"]
+
 [dependencies.derive_builder]
 version = "0.20"
 features = []
