@@ -50,7 +50,7 @@ async fn test_list_pods() {
 
     assert_eq!(pods.len(), 1);
     assert_eq!(pods[0].id, "pod-123");
-    assert_eq!(pods[0].image, "runpod/pytorch:latest");
+    assert_eq!(pods[0].image.as_deref(), Some("runpod/pytorch:latest"));
 }
 
 #[tokio::test]
@@ -100,5 +100,5 @@ async fn test_create_pod() {
         .expect("Failed to create pod");
 
     assert_eq!(pod.id, "pod-456");
-    assert_eq!(pod.image, "runpod/ubuntu:latest");
+    assert_eq!(pod.image.as_deref(), Some("runpod/ubuntu:latest"));
 }
