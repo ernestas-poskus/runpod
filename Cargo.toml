@@ -41,7 +41,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = ["rustls-tls", "strum"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls"]
-serverless = ["dep:serde_json", "dep:pin-project-lite"]
+serverless = ["dep:serde_json", "dep:pin-project-lite", "dep:tokio"]
 strum = ["dep:strum"]
 tracing = ["dep:tracing"]
 
@@ -60,6 +60,11 @@ path = "examples/manage_endpoint.rs"
 [[example]]
 name = "run_endpoint"
 path = "examples/run_endpoint.rs"
+required-features = ["serverless"]
+
+[[test]]
+name = "serverless_worker_tests"
+path = "tests/serverless_worker_tests.rs"
 required-features = ["serverless"]
 
 [dependencies.derive_builder]
@@ -92,6 +97,11 @@ optional = true
 [dependencies.thiserror]
 version = "2.0"
 features = []
+
+[dependencies.tokio]
+version = "1.0"
+features = ["time", "rt"]
+optional = true
 
 [dependencies.tracing]
 version = "0.1"

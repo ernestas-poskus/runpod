@@ -6,8 +6,10 @@
 mod client;
 mod job;
 mod types;
+mod worker;
 
 pub use client::ServerlessEndpoint;
 pub use job::ServerlessJob;
 pub use types::{EndpointHealth, JobOutput, JobStatus, StreamChunk};
 pub(crate) use types::{JobStatusResponse, RunRequest, RunResponse, StreamResponse};
+pub use worker::{ServerlessWorker, WorkerConfig, WorkerJob, WorkerJobResult};
