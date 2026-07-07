@@ -62,6 +62,12 @@ pub enum PodStatus {
 /// This is only relevant for GPU Pods and determines software compatibility.
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CudaVersion {
+    /// CUDA version 13.0.
+    #[serde(rename = "13.0")]
+    V13_0,
+    /// CUDA version 12.9.
+    #[serde(rename = "12.9")]
+    V12_9,
     /// CUDA version 12.8.
     #[serde(rename = "12.8")]
     V12_8,
@@ -100,7 +106,7 @@ pub enum CudaVersion {
 /// Represents the specific GPU models that can be attached to a Pod.
 /// Each GPU type has different performance characteristics, memory capacity,
 /// and pricing. The availability of each type varies by data center and time.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GpuTypeId {
     /// NVIDIA GeForce RTX 4090.
     #[serde(rename = "NVIDIA GeForce RTX 4090")]
@@ -138,6 +144,9 @@ pub enum GpuTypeId {
     /// NVIDIA A100-SXM4-80GB.
     #[serde(rename = "NVIDIA A100-SXM4-80GB")]
     NvidiaA100Sxm4_80Gb,
+    /// NVIDIA A100-SXM4-40GB.
+    #[serde(rename = "NVIDIA A100-SXM4-40GB")]
+    NvidiaA100Sxm4_40Gb,
     /// NVIDIA RTX A4000.
     #[serde(rename = "NVIDIA RTX A4000")]
     NvidiaRtxA4000,
@@ -171,12 +180,21 @@ pub enum GpuTypeId {
     /// Tesla V100-PCIE-16GB.
     #[serde(rename = "Tesla V100-PCIE-16GB")]
     TeslaV100Pcie16Gb,
+    /// Tesla V100-PCIE-32GB.
+    #[serde(rename = "Tesla V100-PCIE-32GB")]
+    TeslaV100Pcie32Gb,
+    /// Tesla T4.
+    #[serde(rename = "Tesla T4")]
+    TeslaT4,
     /// AMD Instinct MI300X OAM.
     #[serde(rename = "AMD Instinct MI300X OAM")]
     AmdInstinctMi300XOam,
     /// NVIDIA RTX A2000.
     #[serde(rename = "NVIDIA RTX A2000")]
     NvidiaRtxA2000,
+    /// NVIDIA RTX A30.
+    #[serde(rename = "NVIDIA RTX A30")]
+    NvidiaRtxA30,
     /// Tesla V100-FHHL-16GB.
     #[serde(rename = "Tesla V100-FHHL-16GB")]
     TeslaV100Fhhl16Gb,
@@ -216,6 +234,61 @@ pub enum GpuTypeId {
     /// NVIDIA B200.
     #[serde(rename = "NVIDIA B200")]
     NvidiaB200,
+    /// Unknown or unsupported GPU hardware type.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::fmt::Display for GpuTypeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Unknown => "Unknown",
+            Self::NvidiaGeForceRtx4090 => "NVIDIA GeForce RTX 4090",
+            Self::NvidiaA40 => "NVIDIA A40",
+            Self::NvidiaRtxA5000 => "NVIDIA RTX A5000",
+            Self::NvidiaGeForceRtx3090 => "NVIDIA GeForce RTX 3090",
+            Self::NvidiaRtxA4500 => "NVIDIA RTX A4500",
+            Self::NvidiaRtxA6000 => "NVIDIA RTX A6000",
+            Self::NvidiaL40S => "NVIDIA L40S",
+            Self::NvidiaL4 => "NVIDIA L4",
+            Self::NvidiaH100_80GbHbm3 => "NVIDIA H100 80GB HBM3",
+            Self::NvidiaRtx4000Ada => "NVIDIA RTX 4000 Ada Generation",
+            Self::NvidiaA100_80GbPcie => "NVIDIA A100 80GB PCIe",
+            Self::NvidiaA100Sxm4_80Gb => "NVIDIA A100-SXM4-80GB",
+            Self::NvidiaA100Sxm4_40Gb => "NVIDIA A100-SXM4-40GB",
+            Self::NvidiaRtxA4000 => "NVIDIA RTX A4000",
+            Self::NvidiaRtx6000Ada => "NVIDIA RTX 6000 Ada Generation",
+            Self::NvidiaRtx2000Ada => "NVIDIA RTX 2000 Ada Generation",
+            Self::NvidiaH200 => "NVIDIA H200",
+            Self::NvidiaL40 => "NVIDIA L40",
+            Self::NvidiaH100Nvl => "NVIDIA H100 NVL",
+            Self::NvidiaH100Pcie => "NVIDIA H100 PCIe",
+            Self::NvidiaGeForceRtx3080Ti => "NVIDIA GeForce RTX 3080 Ti",
+            Self::NvidiaGeForceRtx3080 => "NVIDIA GeForce RTX 3080",
+            Self::NvidiaGeForceRtx3070 => "NVIDIA GeForce RTX 3070",
+            Self::TeslaV100Pcie16Gb => "Tesla V100-PCIE-16GB",
+            Self::TeslaV100Pcie32Gb => "Tesla V100-PCIE-32GB",
+            Self::TeslaT4 => "Tesla T4",
+            Self::AmdInstinctMi300XOam => "AMD Instinct MI300X OAM",
+            Self::NvidiaRtxA2000 => "NVIDIA RTX A2000",
+            Self::NvidiaRtxA30 => "NVIDIA RTX A30",
+            Self::TeslaV100Fhhl16Gb => "Tesla V100-FHHL-16GB",
+            Self::NvidiaGeForceRtx4080Super => "NVIDIA GeForce RTX 4080 SUPER",
+            Self::TeslaV100Sxm2_16Gb => "Tesla V100-SXM2-16GB",
+            Self::NvidiaGeForceRtx4070Ti => "NVIDIA GeForce RTX 4070 Ti",
+            Self::TeslaV100Sxm2_32Gb => "Tesla V100-SXM2-32GB",
+            Self::NvidiaRtx4000SffAda => "NVIDIA RTX 4000 SFF Ada Generation",
+            Self::NvidiaRtx5000Ada => "NVIDIA RTX 5000 Ada Generation",
+            Self::NvidiaGeForceRtx5090 => "NVIDIA GeForce RTX 5090",
+            Self::NvidiaA30 => "NVIDIA A30",
+            Self::NvidiaGeForceRtx4080 => "NVIDIA GeForce RTX 4080",
+            Self::NvidiaGeForceRtx5080 => "NVIDIA GeForce RTX 5080",
+            Self::NvidiaGeForceRtx3090Ti => "NVIDIA GeForce RTX 3090 Ti",
+            Self::NvidiaB200 => "NVIDIA B200",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 /// Available CPU flavor configurations for CPU Pods.
@@ -224,9 +297,7 @@ pub enum GpuTypeId {
 /// Each flavor provides different combinations of cores, memory, and performance
 /// characteristics optimized for various workload types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "strum", derive(Display, EnumString))]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "strum", strum(serialize_all = "lowercase"))]
 pub enum CpuFlavorId {
     /// 3rd generation CPU configuration - compute optimized.
     Cpu3c,
@@ -237,10 +308,28 @@ pub enum CpuFlavorId {
     /// 5th generation CPU configuration - compute optimized.
     Cpu5c,
     /// 5th generation CPU configuration - general purpose.
-    #[default]
     Cpu5g,
     /// 5th generation CPU configuration - memory optimized.
     Cpu5m,
+    /// Unknown or unsupported CPU flavor.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::fmt::Display for CpuFlavorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Unknown => "unknown",
+            Self::Cpu3c => "cpu3c",
+            Self::Cpu3g => "cpu3g",
+            Self::Cpu3m => "cpu3m",
+            Self::Cpu5c => "cpu5c",
+            Self::Cpu5g => "cpu5g",
+            Self::Cpu5m => "cpu5m",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 /// RunPod data center locations.
@@ -248,86 +337,133 @@ pub enum CpuFlavorId {
 /// Represents the geographic locations where RunPod has data centers.
 /// The choice of data center affects latency, regulatory compliance,
 /// and resource availability. Costs may also vary by location.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DataCenterId {
-    /// Data center in Romania (EU-RO-1).
+    /// Romania (EU-RO-1).
     #[serde(rename = "EU-RO-1")]
     EuRo1,
-    /// Data center in Montreal, Canada (CA-MTL-1).
+    /// Montreal, Canada (CA-MTL-1).
     #[serde(rename = "CA-MTL-1")]
     CaMtl1,
-    /// Data center in Sweden (EU-SE-1).
+    /// Sweden (EU-SE-1).
     #[serde(rename = "EU-SE-1")]
     EuSe1,
-    /// Data center in Illinois, USA (US-IL-1).
+    /// Illinois, USA (US-IL-1).
     #[serde(rename = "US-IL-1")]
     UsIl1,
-    /// Data center in Iceland (EUR-IS-1).
+    /// Iceland (EUR-IS-1).
     #[serde(rename = "EUR-IS-1")]
     EurIs1,
-    /// Data center in Czech Republic (EU-CZ-1).
+    /// Czech Republic (EU-CZ-1).
     #[serde(rename = "EU-CZ-1")]
     EuCz1,
-    /// Data center in Texas, USA (US-TX-3).
+    /// Texas, USA (US-TX-3).
     #[serde(rename = "US-TX-3")]
     UsTx3,
-    /// Data center in Iceland (EUR-IS-2).
+    /// Iceland (EUR-IS-2).
     #[serde(rename = "EUR-IS-2")]
     EurIs2,
-    /// Data center in Kansas, USA (US-KS-2).
+    /// Kansas, USA (US-KS-2).
     #[serde(rename = "US-KS-2")]
     UsKs2,
-    /// Data center in Georgia, USA (US-GA-2).
+    /// Georgia, USA (US-GA-2).
     #[serde(rename = "US-GA-2")]
     UsGa2,
-    /// Data center in Washington, USA (US-WA-1).
+    /// Washington, USA (US-WA-1).
     #[serde(rename = "US-WA-1")]
     UsWa1,
-    /// Data center in Texas, USA (US-TX-1).
+    /// Texas, USA (US-TX-1).
     #[serde(rename = "US-TX-1")]
     UsTx1,
-    /// Data center in Montreal, Canada (CA-MTL-3).
+    /// Montreal, Canada (CA-MTL-3).
     #[serde(rename = "CA-MTL-3")]
     CaMtl3,
-    /// Data center in Netherlands (EU-NL-1).
+    /// Netherlands (EU-NL-1).
     #[serde(rename = "EU-NL-1")]
     EuNl1,
-    /// Data center in Texas, USA (US-TX-4).
+    /// Texas, USA (US-TX-4).
     #[serde(rename = "US-TX-4")]
     UsTx4,
-    /// Data center in California, USA (US-CA-2).
+    /// California, USA (US-CA-2).
     #[serde(rename = "US-CA-2")]
     UsCa2,
-    /// Data center in North Carolina, USA (US-NC-1).
+    /// North Carolina, USA (US-NC-1).
     #[serde(rename = "US-NC-1")]
     UsNc1,
-    /// Data center in Australia (OC-AU-1).
+    /// Australia (OC-AU-1).
     #[serde(rename = "OC-AU-1")]
     OcAu1,
-    /// Data center in Delaware, USA (US-DE-1).
+    /// Delaware, USA (US-DE-1).
     #[serde(rename = "US-DE-1")]
     UsDe1,
-    /// Data center in Iceland (EUR-IS-3).
+    /// Iceland (EUR-IS-3).
     #[serde(rename = "EUR-IS-3")]
     EurIs3,
-    /// Data center in Montreal, Canada (CA-MTL-2).
+    /// Montreal, Canada (CA-MTL-2).
     #[serde(rename = "CA-MTL-2")]
     CaMtl2,
-    /// Data center in Japan (AP-JP-1).
+    /// Japan (AP-JP-1).
     #[serde(rename = "AP-JP-1")]
     ApJp1,
-    /// Data center in Norway (EUR-NO-1).
+    /// Norway (EUR-NO-1).
     #[serde(rename = "EUR-NO-1")]
     EurNo1,
-    /// Data center in France (EU-FR-1).
+    /// France (EU-FR-1).
     #[serde(rename = "EU-FR-1")]
     EuFr1,
-    /// Data center in Kansas, USA (US-KS-3).
+    /// Kansas, USA (US-KS-3).
     #[serde(rename = "US-KS-3")]
     UsKs3,
-    /// Data center in Georgia, USA (US-GA-1).
+    /// Georgia, USA (US-GA-1).
     #[serde(rename = "US-GA-1")]
     UsGa1,
+    /// India (AP-IN-1).
+    #[serde(rename = "AP-IN-1")]
+    ApIn1,
+    /// Maryland, USA (US-MD-1).
+    #[serde(rename = "US-MD-1")]
+    UsMd1,
+    /// Unknown or unsupported data center region.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::fmt::Display for DataCenterId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Unknown => "Unknown",
+            Self::EuRo1 => "EU-RO-1",
+            Self::CaMtl1 => "CA-MTL-1",
+            Self::EuSe1 => "EU-SE-1",
+            Self::UsIl1 => "US-IL-1",
+            Self::EurIs1 => "EUR-IS-1",
+            Self::EuCz1 => "EU-CZ-1",
+            Self::UsTx3 => "US-TX-3",
+            Self::EurIs2 => "EUR-IS-2",
+            Self::UsKs2 => "US-KS-2",
+            Self::UsGa2 => "US-GA-2",
+            Self::UsWa1 => "US-WA-1",
+            Self::UsTx1 => "US-TX-1",
+            Self::CaMtl3 => "CA-MTL-3",
+            Self::EuNl1 => "EU-NL-1",
+            Self::UsTx4 => "US-TX-4",
+            Self::UsCa2 => "US-CA-2",
+            Self::UsNc1 => "US-NC-1",
+            Self::OcAu1 => "OC-AU-1",
+            Self::UsDe1 => "US-DE-1",
+            Self::EurIs3 => "EUR-IS-3",
+            Self::CaMtl2 => "CA-MTL-2",
+            Self::ApJp1 => "AP-JP-1",
+            Self::EurNo1 => "EUR-NO-1",
+            Self::EuFr1 => "EU-FR-1",
+            Self::UsKs3 => "US-KS-3",
+            Self::UsGa1 => "US-GA-1",
+            Self::ApIn1 => "AP-IN-1",
+            Self::UsMd1 => "US-MD-1",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 /// Detailed information about GPU resources attached to a Pod.
