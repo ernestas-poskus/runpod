@@ -1,14 +1,14 @@
-use runpod_sdk::{RunpodClient, RunpodConfig};
-use runpod_sdk::service::PodsService;
+use runpod_sdk::RunpodConfig;
 use runpod_sdk::model::PodCreateInput;
-use wiremock::matchers::{method, path, header};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use runpod_sdk::service::PodsService;
 use serde_json::json;
+use wiremock::matchers::{header, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
 async fn test_list_pods() {
     let mock_server = MockServer::start().await;
-    
+
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
         .with_rest_url(&mock_server.uri())
@@ -43,8 +43,11 @@ async fn test_list_pods() {
         .mount(&mock_server)
         .await;
 
-    let pods = client.list_pods(Default::default()).await.expect("Failed to list pods");
-    
+    let pods = client
+        .list_pods(Default::default())
+        .await
+        .expect("Failed to list pods");
+
     assert_eq!(pods.len(), 1);
     assert_eq!(pods[0].id, "pod-123");
     assert_eq!(pods[0].image, "runpod/pytorch:latest");
@@ -53,7 +56,7 @@ async fn test_list_pods() {
 #[tokio::test]
 async fn test_create_pod() {
     let mock_server = MockServer::start().await;
-    
+
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
         .with_rest_url(&mock_server.uri())
@@ -90,9 +93,12 @@ async fn test_create_pod() {
         image_name: Some("runpod/ubuntu:latest".to_string()),
         ..Default::default()
     };
-    
-    let pod = client.create_pod(input).await.expect("Failed to create pod");
-    
+
+    let pod = client
+        .create_pod(input)
+        .await
+        .expect("Failed to create pod");
+
     assert_eq!(pod.id, "pod-456");
     assert_eq!(pod.image, "runpod/ubuntu:latest");
 }

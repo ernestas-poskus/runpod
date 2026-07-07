@@ -67,6 +67,22 @@ name = "serverless_worker_tests"
 path = "tests/serverless_worker_tests.rs"
 required-features = ["serverless"]
 
+[[test]]
+name = "client_tests"
+path = "tests/client_tests.rs"
+
+[[test]]
+name = "endpoints_tests"
+path = "tests/endpoints_tests.rs"
+
+[[test]]
+name = "volumes_tests"
+path = "tests/volumes_tests.rs"
+
+[[test]]
+name = "billing_tests"
+path = "tests/billing_tests.rs"
+
 [dependencies.derive_builder]
 version = "0.20"
 features = []

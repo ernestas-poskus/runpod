@@ -62,25 +62,35 @@ pub enum PodStatus {
 /// This is only relevant for GPU Pods and determines software compatibility.
 #[derive(Debug, Clone, Default, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CudaVersion {
+    /// CUDA version 12.8.
     #[serde(rename = "12.8")]
     V12_8,
+    /// CUDA version 12.7.
     #[serde(rename = "12.7")]
     V12_7,
+    /// CUDA version 12.6.
     #[serde(rename = "12.6")]
     V12_6,
+    /// CUDA version 12.5.
     #[serde(rename = "12.5")]
     V12_5,
+    /// CUDA version 12.4.
     #[serde(rename = "12.4")]
     V12_4,
+    /// CUDA version 12.3.
     #[serde(rename = "12.3")]
     V12_3,
+    /// CUDA version 12.2.
     #[serde(rename = "12.2")]
     V12_2,
+    /// CUDA version 12.1.
     #[serde(rename = "12.1")]
     V12_1,
+    /// CUDA version 12.0.
     #[serde(rename = "12.0")]
     #[default]
     V12_0,
+    /// CUDA version 11.8.
     #[serde(rename = "11.8")]
     V11_8,
 }
@@ -92,80 +102,118 @@ pub enum CudaVersion {
 /// and pricing. The availability of each type varies by data center and time.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GpuTypeId {
+    /// NVIDIA GeForce RTX 4090.
     #[serde(rename = "NVIDIA GeForce RTX 4090")]
     NvidiaGeForceRtx4090,
+    /// NVIDIA A40.
     #[serde(rename = "NVIDIA A40")]
     NvidiaA40,
+    /// NVIDIA RTX A5000.
     #[serde(rename = "NVIDIA RTX A5000")]
     NvidiaRtxA5000,
+    /// NVIDIA GeForce RTX 3090.
     #[serde(rename = "NVIDIA GeForce RTX 3090")]
     NvidiaGeForceRtx3090,
+    /// NVIDIA RTX A4500.
     #[serde(rename = "NVIDIA RTX A4500")]
     NvidiaRtxA4500,
+    /// NVIDIA RTX A6000.
     #[serde(rename = "NVIDIA RTX A6000")]
     NvidiaRtxA6000,
+    /// NVIDIA L40S.
     #[serde(rename = "NVIDIA L40S")]
     NvidiaL40S,
+    /// NVIDIA L4.
     #[serde(rename = "NVIDIA L4")]
     NvidiaL4,
+    /// NVIDIA H100 80GB HBM3.
     #[serde(rename = "NVIDIA H100 80GB HBM3")]
     NvidiaH100_80GbHbm3,
+    /// NVIDIA RTX 4000 Ada Generation.
     #[serde(rename = "NVIDIA RTX 4000 Ada Generation")]
     NvidiaRtx4000Ada,
+    /// NVIDIA A100 80GB PCIe.
     #[serde(rename = "NVIDIA A100 80GB PCIe")]
     NvidiaA100_80GbPcie,
+    /// NVIDIA A100-SXM4-80GB.
     #[serde(rename = "NVIDIA A100-SXM4-80GB")]
     NvidiaA100Sxm4_80Gb,
+    /// NVIDIA RTX A4000.
     #[serde(rename = "NVIDIA RTX A4000")]
     NvidiaRtxA4000,
+    /// NVIDIA RTX 6000 Ada Generation.
     #[serde(rename = "NVIDIA RTX 6000 Ada Generation")]
     NvidiaRtx6000Ada,
+    /// NVIDIA RTX 2000 Ada Generation.
     #[serde(rename = "NVIDIA RTX 2000 Ada Generation")]
     NvidiaRtx2000Ada,
+    /// NVIDIA H200.
     #[serde(rename = "NVIDIA H200")]
     NvidiaH200,
+    /// NVIDIA L40.
     #[serde(rename = "NVIDIA L40")]
     NvidiaL40,
+    /// NVIDIA H100 NVL.
     #[serde(rename = "NVIDIA H100 NVL")]
     NvidiaH100Nvl,
+    /// NVIDIA H100 PCIe.
     #[serde(rename = "NVIDIA H100 PCIe")]
     NvidiaH100Pcie,
+    /// NVIDIA GeForce RTX 3080 Ti.
     #[serde(rename = "NVIDIA GeForce RTX 3080 Ti")]
     NvidiaGeForceRtx3080Ti,
+    /// NVIDIA GeForce RTX 3080.
     #[serde(rename = "NVIDIA GeForce RTX 3080")]
     NvidiaGeForceRtx3080,
+    /// NVIDIA GeForce RTX 3070.
     #[serde(rename = "NVIDIA GeForce RTX 3070")]
     NvidiaGeForceRtx3070,
+    /// Tesla V100-PCIE-16GB.
     #[serde(rename = "Tesla V100-PCIE-16GB")]
     TeslaV100Pcie16Gb,
+    /// AMD Instinct MI300X OAM.
     #[serde(rename = "AMD Instinct MI300X OAM")]
     AmdInstinctMi300XOam,
+    /// NVIDIA RTX A2000.
     #[serde(rename = "NVIDIA RTX A2000")]
     NvidiaRtxA2000,
+    /// Tesla V100-FHHL-16GB.
     #[serde(rename = "Tesla V100-FHHL-16GB")]
     TeslaV100Fhhl16Gb,
+    /// NVIDIA GeForce RTX 4080 SUPER.
     #[serde(rename = "NVIDIA GeForce RTX 4080 SUPER")]
     NvidiaGeForceRtx4080Super,
+    /// Tesla V100-SXM2-16GB.
     #[serde(rename = "Tesla V100-SXM2-16GB")]
     TeslaV100Sxm2_16Gb,
+    /// NVIDIA GeForce RTX 4070 Ti.
     #[serde(rename = "NVIDIA GeForce RTX 4070 Ti")]
     NvidiaGeForceRtx4070Ti,
+    /// Tesla V100-SXM2-32GB.
     #[serde(rename = "Tesla V100-SXM2-32GB")]
     TeslaV100Sxm2_32Gb,
+    /// NVIDIA RTX 4000 SFF Ada Generation.
     #[serde(rename = "NVIDIA RTX 4000 SFF Ada Generation")]
     NvidiaRtx4000SffAda,
+    /// NVIDIA RTX 5000 Ada Generation.
     #[serde(rename = "NVIDIA RTX 5000 Ada Generation")]
     NvidiaRtx5000Ada,
+    /// NVIDIA GeForce RTX 5090.
     #[serde(rename = "NVIDIA GeForce RTX 5090")]
     NvidiaGeForceRtx5090,
+    /// NVIDIA A30.
     #[serde(rename = "NVIDIA A30")]
     NvidiaA30,
+    /// NVIDIA GeForce RTX 4080.
     #[serde(rename = "NVIDIA GeForce RTX 4080")]
     NvidiaGeForceRtx4080,
+    /// NVIDIA GeForce RTX 5080.
     #[serde(rename = "NVIDIA GeForce RTX 5080")]
     NvidiaGeForceRtx5080,
+    /// NVIDIA GeForce RTX 3090 Ti.
     #[serde(rename = "NVIDIA GeForce RTX 3090 Ti")]
     NvidiaGeForceRtx3090Ti,
+    /// NVIDIA B200.
     #[serde(rename = "NVIDIA B200")]
     NvidiaB200,
 }
@@ -202,56 +250,82 @@ pub enum CpuFlavorId {
 /// and resource availability. Costs may also vary by location.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DataCenterId {
+    /// Data center in Romania (EU-RO-1).
     #[serde(rename = "EU-RO-1")]
     EuRo1,
+    /// Data center in Montreal, Canada (CA-MTL-1).
     #[serde(rename = "CA-MTL-1")]
     CaMtl1,
+    /// Data center in Sweden (EU-SE-1).
     #[serde(rename = "EU-SE-1")]
     EuSe1,
+    /// Data center in Illinois, USA (US-IL-1).
     #[serde(rename = "US-IL-1")]
     UsIl1,
+    /// Data center in Iceland (EUR-IS-1).
     #[serde(rename = "EUR-IS-1")]
     EurIs1,
+    /// Data center in Czech Republic (EU-CZ-1).
     #[serde(rename = "EU-CZ-1")]
     EuCz1,
+    /// Data center in Texas, USA (US-TX-3).
     #[serde(rename = "US-TX-3")]
     UsTx3,
+    /// Data center in Iceland (EUR-IS-2).
     #[serde(rename = "EUR-IS-2")]
     EurIs2,
+    /// Data center in Kansas, USA (US-KS-2).
     #[serde(rename = "US-KS-2")]
     UsKs2,
+    /// Data center in Georgia, USA (US-GA-2).
     #[serde(rename = "US-GA-2")]
     UsGa2,
+    /// Data center in Washington, USA (US-WA-1).
     #[serde(rename = "US-WA-1")]
     UsWa1,
+    /// Data center in Texas, USA (US-TX-1).
     #[serde(rename = "US-TX-1")]
     UsTx1,
+    /// Data center in Montreal, Canada (CA-MTL-3).
     #[serde(rename = "CA-MTL-3")]
     CaMtl3,
+    /// Data center in Netherlands (EU-NL-1).
     #[serde(rename = "EU-NL-1")]
     EuNl1,
+    /// Data center in Texas, USA (US-TX-4).
     #[serde(rename = "US-TX-4")]
     UsTx4,
+    /// Data center in California, USA (US-CA-2).
     #[serde(rename = "US-CA-2")]
     UsCa2,
+    /// Data center in North Carolina, USA (US-NC-1).
     #[serde(rename = "US-NC-1")]
     UsNc1,
+    /// Data center in Australia (OC-AU-1).
     #[serde(rename = "OC-AU-1")]
     OcAu1,
+    /// Data center in Delaware, USA (US-DE-1).
     #[serde(rename = "US-DE-1")]
     UsDe1,
+    /// Data center in Iceland (EUR-IS-3).
     #[serde(rename = "EUR-IS-3")]
     EurIs3,
+    /// Data center in Montreal, Canada (CA-MTL-2).
     #[serde(rename = "CA-MTL-2")]
     CaMtl2,
+    /// Data center in Japan (AP-JP-1).
     #[serde(rename = "AP-JP-1")]
     ApJp1,
+    /// Data center in Norway (EUR-NO-1).
     #[serde(rename = "EUR-NO-1")]
     EurNo1,
+    /// Data center in France (EU-FR-1).
     #[serde(rename = "EU-FR-1")]
     EuFr1,
+    /// Data center in Kansas, USA (US-KS-3).
     #[serde(rename = "US-KS-3")]
     UsKs3,
+    /// Data center in Georgia, USA (US-GA-1).
     #[serde(rename = "US-GA-1")]
     UsGa1,
 }
