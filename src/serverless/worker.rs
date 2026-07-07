@@ -92,7 +92,6 @@ impl WorkerConfig {
             .replace("$RUNPOD_POD_ID", &worker_id);
         let post_output_url = std::env::var("RUNPOD_WEBHOOK_POST_OUTPUT")
             .map_err(|_| Error::Job("RUNPOD_WEBHOOK_POST_OUTPUT is missing".to_string()))?
-            .replace("$ID", &worker_id)
             .replace("$RUNPOD_POD_ID", &worker_id);
         let ping_url = std::env::var("RUNPOD_WEBHOOK_PING").ok().map(|url| {
             url.replace("$ID", &worker_id)
@@ -259,7 +258,23 @@ impl ServerlessWorker {
             request = request.header("Authorization", api_key);
         }
 
-        request.send().await?.error_for_status()?;
+        let response = request.send().await?;
+        if let Err(error) = response.error_for_status_ref() {
+            #[cfg(feature = "tracing")]
+            {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                tracing::warn!(
+                    target: TRACING_TARGET,
+                    job_id = %job.id,
+                    %status,
+                    body = %body,
+                    "RunPod worker result post failed"
+                );
+            }
+
+            return Err(error.into());
+        }
 
         #[cfg(feature = "tracing")]
         tracing::info!(target: TRACING_TARGET, job_id = %job.id, "RunPod worker result sent");
@@ -285,8 +300,8 @@ impl ServerlessWorker {
                     .lock()
                     .map(|jobs| jobs.clone())
                     .unwrap_or_default();
-                for job_id in &job_ids {
-                    request = request.query(&[("job_id", job_id.as_str())]);
+                if !job_ids.is_empty() {
+                    request = request.query(&[("job_id", job_ids.join(",").as_str())]);
                 }
                 if let Some(api_key) = &api_key {
                     request = request.header("Authorization", api_key);
