@@ -37,7 +37,7 @@ async fn test_serverless_endpoint_run_and_await() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_api_url(&mock_server.uri())
+        .with_api_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 

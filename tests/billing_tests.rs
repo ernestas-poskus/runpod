@@ -13,7 +13,7 @@ async fn test_get_pod_billing() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
@@ -60,7 +60,7 @@ async fn test_get_endpoint_billing() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
@@ -107,7 +107,7 @@ async fn test_get_volume_billing() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 

@@ -11,7 +11,7 @@ async fn test_create_volume() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
@@ -58,7 +58,7 @@ async fn test_list_volumes() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
@@ -98,7 +98,7 @@ async fn test_get_volume() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
@@ -132,7 +132,7 @@ async fn test_update_volume() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
@@ -176,7 +176,7 @@ async fn test_delete_volume() {
 
     let client = RunpodConfig::builder()
         .with_api_key("test-api-key")
-        .with_rest_url(&mock_server.uri())
+        .with_rest_url(mock_server.uri())
         .build_client()
         .expect("Failed to build client");
 
