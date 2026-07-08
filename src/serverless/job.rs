@@ -46,10 +46,16 @@ pin_project_lite::pin_project! {
     }
 }
 
+/// A future that represents the polling of a job's status from the serverless endpoint.
+pub type PollingFuture = Pin<Box<dyn Future<Output = Result<(JobStatus, Option<Value>)>> + Send>>;
+
+/// A future that represents the submission of a job to the serverless endpoint.
+pub type SubmittingFuture = Pin<Box<dyn Future<Output = Result<String>> + Send>>;
+
 enum JobState {
     NotSubmitted,
-    Submitting(Pin<Box<dyn Future<Output = Result<String>> + Send>>),
-    Polling(Pin<Box<dyn Future<Output = Result<(JobStatus, Option<Value>)>> + Send>>),
+    Submitting(SubmittingFuture),
+    Polling(PollingFuture),
     Ready(Option<Value>),
     Failed(crate::Error),
 }
