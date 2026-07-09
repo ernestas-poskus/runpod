@@ -182,6 +182,70 @@ async fn worker_heartbeat_sends_active_jobs_as_comma_separated_query_value() {
 }
 
 #[tokio::test]
+async fn worker_run_processes_jobs_concurrently_up_to_configured_concurrency() {
+    let server = MockServer::start().await;
+    let config = WorkerConfig {
+        worker_id: "worker-1".to_string(),
+        get_job_url: format!("{}/job-take/worker-1", server.uri()),
+        post_output_url: format!("{}/job-done/$ID", server.uri()),
+        ping_url: None,
+        api_key: None,
+        concurrency: 2,
+        ping_interval: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(5),
+    };
+    let worker = ServerlessWorker::new(config).unwrap();
+
+    // Every poll gets a job — with `concurrency: 2`, `run` should keep two
+    // of `run`'s internal poll/process loops going side by side, so two
+    // handler invocations should be in flight at once at some point.
+    Mock::given(method("GET"))
+        .and(path("/job-take/worker-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "job-1",
+            "input": {}
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/job-done/job-1"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    let concurrent = Arc::new(AtomicUsize::new(0));
+    let max_concurrent = Arc::new(AtomicUsize::new(0));
+    let handler_concurrent = Arc::clone(&concurrent);
+    let handler_max_concurrent = Arc::clone(&max_concurrent);
+
+    let worker_task = tokio::spawn(async move {
+        worker
+            .run(move |_job| {
+                let concurrent = Arc::clone(&handler_concurrent);
+                let max_concurrent = Arc::clone(&handler_max_concurrent);
+                async move {
+                    let now = concurrent.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_concurrent.fetch_max(now, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    concurrent.fetch_sub(1, Ordering::SeqCst);
+                    Ok(json!({"ok": true}))
+                }
+            })
+            .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    worker_task.abort();
+
+    assert_eq!(
+        max_concurrent.load(Ordering::SeqCst),
+        2,
+        "expected 2 handler invocations to overlap with concurrency=2"
+    );
+}
+
+#[tokio::test]
 async fn worker_returns_false_when_no_job_is_available() {
     let server = MockServer::start().await;
     let config = WorkerConfig {

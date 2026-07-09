@@ -150,16 +150,60 @@ impl ServerlessWorker {
         Self::new(WorkerConfig::from_env()?)
     }
 
-    /// Run the worker loop forever.
+    /// Run the worker loop forever, with up to [`WorkerConfig::concurrency`]
+    /// jobs in flight at once.
+    ///
+    /// Spawns `concurrency` independent copies of the poll/process loop
+    /// (`concurrency` defaults to 1, from `RUNPOD_WORKER_CONCURRENCY` via
+    /// [`WorkerConfig::from_env`]) — each copy is still internally
+    /// sequential (`take_job` → await `handler` to completion →
+    /// `post_result` → repeat), but running `concurrency` of them side by
+    /// side lets that many jobs actually overlap, which matters for any
+    /// handler backed by a worker pool wider than one (e.g. multiple GPU
+    /// inference slots). A single heartbeat task is still shared across
+    /// all of them and reports every concurrently active job id (see
+    /// `start_heartbeat`/`active_jobs`).
+    ///
+    /// `handler` needs `Send + Sync + 'static` (and `Fut: Send + 'static`)
+    /// so it can be shared across the spawned tasks — virtually always
+    /// true already for realistic async worker handlers running on a
+    /// multi-threaded Tokio runtime.
     pub async fn run<H, Fut>(&self, handler: H) -> Result<()>
+    where
+        H: Fn(WorkerJob) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = std::result::Result<Value, String>> + Send + 'static,
+    {
+        self.start_heartbeat();
+
+        let concurrency = self.config.concurrency.max(1);
+        let handler = Arc::new(handler);
+
+        let mut tasks = Vec::with_capacity(concurrency);
+        for _ in 0..concurrency {
+            let worker = self.clone();
+            let handler = Arc::clone(&handler);
+            tasks.push(tokio::spawn(async move {
+                worker.run_loop(handler.as_ref()).await
+            }));
+        }
+
+        for task in tasks {
+            task.await
+                .map_err(|error| Error::Job(format!("worker task panicked: {error}")))?;
+        }
+        Ok(())
+    }
+
+    /// The single-job-at-a-time poll/process loop `run` spawns
+    /// `concurrency` copies of. Never returns under normal operation — see
+    /// `run`'s doc comment.
+    async fn run_loop<H, Fut>(&self, handler: &H)
     where
         H: Fn(WorkerJob) -> Fut,
         Fut: Future<Output = std::result::Result<Value, String>>,
     {
-        self.start_heartbeat();
-
         loop {
-            match self.run_once(&handler).await {
+            match self.run_once(handler).await {
                 Ok(_) => {}
                 Err(error) => {
                     #[cfg(feature = "tracing")]
