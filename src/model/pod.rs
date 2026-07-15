@@ -33,24 +33,19 @@ pub struct Pod {
     pub desired_status: Option<PodStatus>,
     /// The cost in RunPod credits per hour of running the Pod.
     /// Note that the actual cost may be lower if Savings Plans are applied.
-    #[serde(default)]
-    pub cost_per_hr: f64,
+    pub cost_per_hr: Option<f64>,
     /// The effective cost in RunPod credits per hour of running the Pod,
     /// adjusted by active Savings Plans.
-    #[serde(default)]
-    pub adjusted_cost_per_hr: f64,
+    pub adjusted_cost_per_hr: Option<f64>,
     /// The number of GPUs attached to the Pod (if it's a GPU Pod).
     pub gpu_count: Option<i32>,
     /// The number of virtual CPUs attached to the Pod.
-    #[serde(default)]
-    pub vcpu_count: f64,
+    pub vcpu_count: Option<f64>,
     /// The amount of RAM, in gigabytes (GB), attached to the Pod.
-    #[serde(default)]
-    pub memory_in_gb: f64,
+    pub memory_in_gb: Option<f64>,
     /// The amount of disk space, in gigabytes (GB), allocated on the container disk.
     /// The data on the container disk is wiped when the Pod restarts.
-    #[serde(default)]
-    pub container_disk_in_gb: i32,
+    pub container_disk_in_gb: Option<i32>,
     /// The amount of disk space, in gigabytes (GB), allocated on the Pod volume.
     /// The data on the Pod volume is persisted across Pod restarts.
     pub volume_in_gb: Option<i32>,
@@ -58,8 +53,7 @@ pub struct Pod {
     pub volume_mount_path: Option<String>,
     /// Whether the local network volume of the Pod is encrypted.
     /// Can only be set when creating a Pod.
-    #[serde(default)]
-    pub volume_encrypted: bool,
+    pub volume_encrypted: Option<bool>,
     /// A list of ports exposed on the Pod. Each port is formatted as
     /// `[port number]/[protocol]`. Protocol can be either `http` or `tcp`.
     pub ports: Option<Vec<String>>,
@@ -82,11 +76,9 @@ pub struct Pod {
     /// a lower cost but can be stopped at any time to free up resources for
     /// another Pod. A reserved Pod is rented at a higher cost but runs until
     /// it exits or is manually stopped.
-    #[serde(default)]
-    pub interruptible: bool,
+    pub interruptible: Option<bool>,
     /// Whether the Pod is locked. Locking a Pod disables stopping or resetting it.
-    #[serde(default)]
-    pub locked: bool,
+    pub locked: Option<bool>,
     /// GPU information if the Pod has GPUs attached.
     pub gpu: Option<GpuInfo>,
     /// If the Pod is a CPU Pod, the unique string identifying the CPU flavor

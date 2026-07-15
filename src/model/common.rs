@@ -328,11 +328,9 @@ pub struct Machine {
     /// Detailed information about the CPU type on this machine.
     pub cpu_type: Option<CpuType>,
     /// Geographic location description of this machine.
-    #[serde(default)]
-    pub location: String,
+    pub location: Option<String>,
     /// Data center identifier where this machine is located.
-    #[serde(default)]
-    pub data_center_id: String,
+    pub data_center_id: Option<String>,
     /// Disk I/O throughput capacity in megabytes per second.
     pub disk_throughput_m_bps: Option<i32>,
     /// Maximum network download speed in megabits per second.
@@ -340,11 +338,9 @@ pub struct Machine {
     /// Maximum network upload speed in megabits per second.
     pub max_upload_speed_mbps: Option<i32>,
     /// Whether this machine supports public IP assignment.
-    #[serde(default)]
-    pub support_public_ip: bool,
+    pub support_public_ip: Option<bool>,
     /// Whether this machine is in the Secure Cloud environment.
-    #[serde(default)]
-    pub secure_cloud: bool,
+    pub secure_cloud: Option<bool>,
     /// Scheduled maintenance start time, if any.
     pub maintenance_start: Option<String>,
     /// Scheduled maintenance end time, if any.
@@ -354,8 +350,7 @@ pub struct Machine {
     /// General notes or information about this machine.
     pub note: Option<String>,
     /// Current hourly cost in RunPod credits for this machine.
-    #[serde(default)]
-    pub cost_per_hr: f64,
+    pub cost_per_hr: Option<f64>,
     /// Current price per GPU hour in RunPod credits, if applicable.
     pub current_price_per_gpu: Option<f64>,
     /// Number of GPUs currently available on this machine.
@@ -415,3 +410,14 @@ pub type EnvVars = HashMap<String, String>;
 /// Maps internal container ports (as strings) to external public ports
 /// (as integers) for network access to the Pod.
 pub type PortMappings = HashMap<String, i32>;
+
+#[cfg(test)]
+mod location_test {
+    use super::*;
+    #[test]
+    fn empty_machine_deserializes() {
+        let j = "{}";
+        let m: Machine = serde_json::from_str(j).expect("empty machine should work");
+        assert!(m.location.is_none());
+    }
+}
