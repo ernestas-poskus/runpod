@@ -197,21 +197,73 @@ impl ServerlessWorker {
     /// The single-job-at-a-time poll/process loop `run` spawns
     /// `concurrency` copies of. Never returns under normal operation — see
     /// `run`'s doc comment.
+    ///
+    /// Prefetches the next job (`take_job(true)`, `job_in_progress=true` —
+    /// RunPod's own sanctioned "I'm still busy, but tell me what's next"
+    /// signal, the same one RunPod's official Python/Go workers use) while
+    /// `handler` is still running for the current job, instead of only
+    /// polling after `post_result` completes. Without this, a worker whose
+    /// handler is backed by a single-threaded resource (e.g. one dedicated
+    /// GPU inference thread — `concurrency` can't help there, since more
+    /// copies of this loop would just queue behind the same resource) sits
+    /// fully idle for a whole `take_job` HTTP round trip between every pair
+    /// of jobs, even when the queue already has the next job waiting. This
+    /// doesn't change `run`/`run_once`'s public contract — a caller driving
+    /// `run_once` directly (as the existing test suite does) still gets the
+    /// simple non-prefetching one-job-at-a-time behavior; only `run`'s
+    /// internal loop benefits.
     async fn run_loop<H, Fut>(&self, handler: &H)
     where
         H: Fn(WorkerJob) -> Fut,
         Fut: Future<Output = std::result::Result<Value, String>>,
     {
+        let mut prefetched: Option<WorkerJob> = None;
         loop {
-            match self.run_once(handler).await {
-                Ok(_) => {}
+            let job = match prefetched.take() {
+                Some(job) => job,
+                None => match self.take_job(false).await {
+                    Ok(Some(job)) => job,
+                    Ok(None) => {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    Err(error) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(target: TRACING_TARGET, error = %error, "failed to take RunPod job");
+                        #[cfg(not(feature = "tracing"))]
+                        let _ = &error;
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                },
+            };
+
+            #[cfg(feature = "tracing")]
+            tracing::info!(target: TRACING_TARGET, job_id = %job.id, "received RunPod worker job");
+
+            self.mark_job_active(&job.id);
+            let (handler_result, prefetch_result) =
+                tokio::join!(handler(job.clone()), self.take_job(true));
+            let result = match handler_result {
+                Ok(output) => WorkerJobResult::output(output),
+                Err(error) => WorkerJobResult::error(error),
+            };
+            match prefetch_result {
+                Ok(next) => prefetched = next,
                 Err(error) => {
                     #[cfg(feature = "tracing")]
-                    tracing::warn!(target: TRACING_TARGET, error = %error, "failed to take RunPod job");
+                    tracing::warn!(target: TRACING_TARGET, error = %error, "failed to prefetch next RunPod job");
                     #[cfg(not(feature = "tracing"))]
                     let _ = &error;
-                    tokio::time::sleep(Duration::from_secs(1)).await;
                 }
+            }
+            let post_result = self.post_result(&job, &result, false).await;
+            self.mark_job_inactive(&job.id);
+            if let Err(error) = post_result {
+                #[cfg(feature = "tracing")]
+                tracing::warn!(target: TRACING_TARGET, error = %error, "failed to post RunPod job result");
+                #[cfg(not(feature = "tracing"))]
+                let _ = &error;
             }
         }
     }

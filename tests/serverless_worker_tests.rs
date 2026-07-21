@@ -246,6 +246,101 @@ async fn worker_run_processes_jobs_concurrently_up_to_configured_concurrency() {
 }
 
 #[tokio::test]
+async fn worker_run_prefetches_next_job_while_handler_is_running() {
+    let server = MockServer::start().await;
+    let config = WorkerConfig {
+        worker_id: "worker-1".to_string(),
+        get_job_url: format!("{}/job-take/worker-1", server.uri()),
+        post_output_url: format!("{}/job-done/$ID", server.uri()),
+        ping_url: None,
+        api_key: None,
+        concurrency: 1,
+        ping_interval: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(5),
+    };
+    let worker = ServerlessWorker::new(config).unwrap();
+
+    // The initial "I'm free" poll (`job_in_progress=0`) hands out job-1.
+    // Bounded below, not exactly — once job-2 (and whatever the loop polls
+    // for afterwards) is in flight, further iterations may or may not land
+    // another `job_in_progress=0` poll within this test's timing window;
+    // only the first two entries in `order` (checked below) matter.
+    Mock::given(method("GET"))
+        .and(path("/job-take/worker-1"))
+        .and(query_param("job_in_progress", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "job-1",
+            "input": {}
+        })))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    // The prefetch poll (`job_in_progress=1`) — issued while job-1's
+    // handler is still running — hands out job-2. This is the behavior
+    // under test: if `run`'s loop only polled after `post_result`
+    // completed (no prefetch), this mock would never be hit before job-1
+    // finishes, and job-2 wouldn't be ready the instant job-1 is done.
+    Mock::given(method("GET"))
+        .and(path("/job-take/worker-1"))
+        .and(query_param("job_in_progress", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "job-2",
+            "input": {}
+        })))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/job-done/job-1"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1..)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/job-done/job-2"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let handler_order = Arc::clone(&order);
+
+    let worker_task = tokio::spawn(async move {
+        worker
+            .run(move |job| {
+                let order = Arc::clone(&handler_order);
+                async move {
+                    order.lock().unwrap().push(job.id.clone());
+                    if job.id == "job-1" {
+                        // Long enough that the concurrent prefetch poll for
+                        // job-2 has time to land before this returns.
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                    Ok(json!({"ok": true}))
+                }
+            })
+            .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    worker_task.abort();
+
+    let order = order.lock().unwrap();
+    assert!(
+        order.len() >= 2,
+        "expected at least job-1 and job-2 to start, got {order:?}"
+    );
+    assert_eq!(
+        order[..2],
+        ["job-1".to_string(), "job-2".to_string()],
+        "job-2 should start right after job-1 finishes, using the prefetched job \
+         (not a fresh job_in_progress=0 poll after job-1's post_result)"
+    );
+}
+
+#[tokio::test]
 async fn worker_returns_false_when_no_job_is_available() {
     let server = MockServer::start().await;
     let config = WorkerConfig {
