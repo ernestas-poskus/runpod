@@ -121,7 +121,7 @@ features = []
 
 [dependencies.tokio]
 version = "1.0"
-features = ["time", "rt"]
+features = ["time", "rt", "macros"]
 optional = true
 
 [dependencies.tracing]
