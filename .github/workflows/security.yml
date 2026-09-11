@@ -27,8 +27,6 @@ on:
       - "rustfmt.toml"
       - "Makefile"
       - ".github/workflows/security.yml"
-  schedule:
-    - cron: "0 2 * * *"
   workflow_dispatch:
 
 env:
