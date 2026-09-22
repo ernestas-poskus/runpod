@@ -308,6 +308,17 @@ impl ServerlessWorker {
     }
 
     async fn take_job(&self, job_in_progress: bool) -> Result<Option<WorkerJob>> {
+        // With `concurrency > 1`, a loop with no job of its own still polls
+        // while sibling loops run jobs. Reporting `job_in_progress=0` then
+        // tells RunPod the whole worker is idle, and RunPod abandons and
+        // retries its running jobs after ~60 s. The flag is per worker, so
+        // any active job on this worker makes it true.
+        let job_in_progress = job_in_progress
+            || self
+                .active_jobs
+                .lock()
+                .map(|jobs| !jobs.is_empty())
+                .unwrap_or(false);
         let url = append_query(
             &self.config.get_job_url,
             "job_in_progress",

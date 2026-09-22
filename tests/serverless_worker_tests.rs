@@ -341,6 +341,93 @@ async fn worker_run_prefetches_next_job_while_handler_is_running() {
 }
 
 #[tokio::test]
+async fn worker_run_reports_job_in_progress_from_every_loop_while_a_job_is_active() {
+    // With `concurrency > 1`, the loops that are not running the job keep
+    // polling. If they poll with `job_in_progress=0`, RunPod reads the worker
+    // as idle, abandons the running job after ~60 s and retries it ("job
+    // timed out after 1 retries"), so every job longer than that fails.
+    // While any job is active, every poll must say `job_in_progress=1`.
+    let server = MockServer::start().await;
+    let config = WorkerConfig {
+        worker_id: "worker-1".to_string(),
+        get_job_url: format!("{}/job-take/worker-1", server.uri()),
+        post_output_url: format!("{}/job-done/$ID", server.uri()),
+        ping_url: None,
+        api_key: None,
+        concurrency: 2,
+        ping_interval: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(5),
+    };
+    let worker = ServerlessWorker::new(config).unwrap();
+
+    // The first "I'm free" poll hands out job-1; every later poll gets no job.
+    Mock::given(method("GET"))
+        .and(path("/job-take/worker-1"))
+        .and(query_param("job_in_progress", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "job-1",
+            "input": {}
+        })))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/job-take/worker-1"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+
+    let started = Arc::new(AtomicUsize::new(0));
+    let handler_started = Arc::clone(&started);
+    let worker_task = tokio::spawn(async move {
+        worker
+            .run(move |_job| {
+                let started = Arc::clone(&handler_started);
+                async move {
+                    started.fetch_add(1, Ordering::SeqCst);
+                    // Still running when the worker is aborted below.
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    Ok(json!({"ok": true}))
+                }
+            })
+            .await
+    });
+
+    // Long enough for the idle loop's 1 s retry sleep to elapse at least once.
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    worker_task.abort();
+
+    assert_eq!(started.load(Ordering::SeqCst), 1, "job-1 should be running");
+    let polls: Vec<String> = server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|request| request.url.path() == "/job-take/worker-1")
+        .map(|request| {
+            request
+                .url
+                .query_pairs()
+                .find(|(key, _)| key == "job_in_progress")
+                .map(|(_, value)| value.into_owned())
+                .unwrap_or_default()
+        })
+        .collect();
+    // Each loop's first poll can race ahead of job-1 being handed out, so
+    // one idle poll per loop is legitimate; every poll after those happens
+    // while job-1 is active and must report 1.
+    let concurrency = 2;
+    assert!(
+        polls.len() > concurrency,
+        "expected the second loop to keep polling while job-1 runs, got {polls:?}"
+    );
+    assert!(
+        polls[concurrency..].iter().all(|value| value == "1"),
+        "polls while job-1 is active must report job_in_progress=1, got {polls:?}"
+    );
+}
+
+#[tokio::test]
 async fn worker_returns_false_when_no_job_is_available() {
     let server = MockServer::start().await;
     let config = WorkerConfig {
