@@ -167,7 +167,7 @@ async fn worker_heartbeat_sends_active_jobs_as_comma_separated_query_value() {
                 let handler_call_count = Arc::clone(&handler_call_count);
                 async move {
                     if handler_call_count.fetch_add(1, Ordering::SeqCst) == 0 {
-                        tokio::time::sleep(Duration::from_millis(75)).await;
+                        tokio::time::sleep(Duration::from_millis(150)).await;
                         Ok(json!({"ok": true}))
                     } else {
                         future::pending::<Result<serde_json::Value, String>>().await
@@ -177,7 +177,7 @@ async fn worker_heartbeat_sends_active_jobs_as_comma_separated_query_value() {
             .await
     });
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
     worker_task.abort();
 }
 
@@ -316,7 +316,7 @@ async fn worker_run_prefetches_next_job_while_handler_is_running() {
                     if job.id == "job-1" {
                         // Long enough that the concurrent prefetch poll for
                         // job-2 has time to land before this returns.
-                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                     Ok(json!({"ok": true}))
                 }
@@ -324,7 +324,7 @@ async fn worker_run_prefetches_next_job_while_handler_is_running() {
             .await
     });
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
     worker_task.abort();
 
     let order = order.lock().unwrap();
