@@ -196,15 +196,14 @@ async fn worker_run_processes_jobs_concurrently_up_to_configured_concurrency() {
     };
     let worker = ServerlessWorker::new(config).unwrap();
 
-    // Every poll gets a job — with `concurrency: 2`, `run` should keep two
-    // of `run`'s internal poll/process loops going side by side, so two
-    // handler invocations should be in flight at once at some point.
+    // Every poll hands out a full batch — with `concurrency: 2`, `run`
+    // should keep two handler invocations in flight at once.
     Mock::given(method("GET"))
-        .and(path("/job-take/worker-1"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "id": "job-1",
-            "input": {}
-        })))
+        .and(path("/job-take-batch/worker-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"id": "job-1", "input": {}},
+            {"id": "job-1", "input": {}}
+        ])))
         .mount(&server)
         .await;
 
@@ -341,12 +340,10 @@ async fn worker_run_prefetches_next_job_while_handler_is_running() {
 }
 
 #[tokio::test]
-async fn worker_run_reports_job_in_progress_from_every_loop_while_a_job_is_active() {
-    // With `concurrency > 1`, the loops that are not running the job keep
-    // polling. If they poll with `job_in_progress=0`, RunPod reads the worker
-    // as idle, abandons the running job after ~60 s and retries it ("job
-    // timed out after 1 retries"), so every job longer than that fails.
-    // While any job is active, every poll must say `job_in_progress=1`.
+async fn worker_run_reports_job_in_progress_while_a_job_is_active() {
+    // While any job runs, every poll must say `job_in_progress=1`. A poll
+    // that claims the worker is idle invites RunPod to dispatch more work
+    // to a busy worker and to scale it down mid-job.
     let server = MockServer::start().await;
     let config = WorkerConfig {
         worker_id: "worker-1".to_string(),
@@ -360,19 +357,18 @@ async fn worker_run_reports_job_in_progress_from_every_loop_while_a_job_is_activ
     };
     let worker = ServerlessWorker::new(config).unwrap();
 
-    // The first "I'm free" poll hands out job-1; every later poll gets no job.
+    // The first poll hands out one job; later polls find nothing.
     Mock::given(method("GET"))
-        .and(path("/job-take/worker-1"))
+        .and(path("/job-take-batch/worker-1"))
         .and(query_param("job_in_progress", "0"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "id": "job-1",
-            "input": {}
-        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"id": "job-1", "input": {}}
+        ])))
         .up_to_n_times(1)
         .mount(&server)
         .await;
     Mock::given(method("GET"))
-        .and(path("/job-take/worker-1"))
+        .and(path("/job-take-batch/worker-1"))
         .respond_with(ResponseTemplate::new(204))
         .mount(&server)
         .await;
@@ -393,8 +389,7 @@ async fn worker_run_reports_job_in_progress_from_every_loop_while_a_job_is_activ
             .await
     });
 
-    // Long enough for the idle loop's 1 s retry sleep to elapse at least once.
-    tokio::time::sleep(Duration::from_millis(2500)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     worker_task.abort();
 
     assert_eq!(started.load(Ordering::SeqCst), 1, "job-1 should be running");
@@ -403,7 +398,7 @@ async fn worker_run_reports_job_in_progress_from_every_loop_while_a_job_is_activ
         .await
         .unwrap()
         .into_iter()
-        .filter(|request| request.url.path() == "/job-take/worker-1")
+        .filter(|request| request.url.path() == "/job-take-batch/worker-1")
         .map(|request| {
             request
                 .url
@@ -413,16 +408,12 @@ async fn worker_run_reports_job_in_progress_from_every_loop_while_a_job_is_activ
                 .unwrap_or_default()
         })
         .collect();
-    // Each loop's first poll can race ahead of job-1 being handed out, so
-    // one idle poll per loop is legitimate; every poll after those happens
-    // while job-1 is active and must report 1.
-    let concurrency = 2;
     assert!(
-        polls.len() > concurrency,
-        "expected the second loop to keep polling while job-1 runs, got {polls:?}"
+        polls.len() > 1,
+        "expected the dispatcher to keep polling for the free slot, got {polls:?}"
     );
     assert!(
-        polls[concurrency..].iter().all(|value| value == "1"),
+        polls[1..].iter().all(|value| value == "1"),
         "polls while job-1 is active must report job_in_progress=1, got {polls:?}"
     );
 }
@@ -456,4 +447,83 @@ async fn worker_returns_false_when_no_job_is_available() {
         .unwrap();
 
     assert!(!processed);
+}
+
+#[tokio::test]
+async fn worker_run_takes_jobs_in_one_batch_call_when_concurrency_is_above_one() {
+    // One poll at a time, asking for as many jobs as there are free slots,
+    // is what RunPod's own workers do (`job-take-batch`). The previous
+    // design ran one poll loop per slot: while a job was running, the idle
+    // loops kept calling `job-take`, RunPod read the worker as available
+    // and scaled it down mid-job (moss-tts production, 2026-09-22).
+    let server = MockServer::start().await;
+    let config = WorkerConfig {
+        worker_id: "worker-1".to_string(),
+        get_job_url: format!("{}/job-take/worker-1?token=abc", server.uri()),
+        post_output_url: format!("{}/job-done/$ID?token=abc", server.uri()),
+        ping_url: None,
+        api_key: None,
+        concurrency: 3,
+        ping_interval: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(5),
+    };
+    let worker = ServerlessWorker::new(config).unwrap();
+
+    // The batch endpoint hands out two jobs for the three free slots.
+    Mock::given(method("GET"))
+        .and(path("/job-take-batch/worker-1"))
+        .and(query_param("token", "abc"))
+        .and(query_param("batch_size", "3"))
+        .and(query_param("job_in_progress", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"id": "job-1", "input": {}},
+            {"id": "job-2", "input": {}}
+        ])))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    // Later polls (slots still busy) find nothing.
+    Mock::given(method("GET"))
+        .and(path("/job-take-batch/worker-1"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    // The single-job endpoint must not be used at concurrency > 1.
+    Mock::given(method("GET"))
+        .and(path("/job-take/worker-1"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(0)
+        .mount(&server)
+        .await;
+    for id in ["job-1", "job-2"] {
+        Mock::given(method("POST"))
+            .and(path(format!("/job-done/{id}")))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let handler_seen = Arc::clone(&seen);
+    let worker_task = tokio::spawn(async move {
+        worker
+            .run(move |job| {
+                let seen = Arc::clone(&handler_seen);
+                async move {
+                    seen.lock().unwrap().push(job.id.clone());
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    Ok(json!({"ok": true}))
+                }
+            })
+            .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    worker_task.abort();
+
+    let mut ids = seen.lock().unwrap().clone();
+    ids.sort();
+    assert_eq!(ids, vec!["job-1".to_string(), "job-2".to_string()]);
 }

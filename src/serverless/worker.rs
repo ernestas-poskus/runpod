@@ -178,25 +178,122 @@ impl ServerlessWorker {
         let concurrency = self.config.concurrency.max(1);
         let handler = Arc::new(handler);
 
-        let mut tasks = Vec::with_capacity(concurrency);
-        for _ in 0..concurrency {
-            let worker = self.clone();
-            let handler = Arc::clone(&handler);
-            tasks.push(tokio::spawn(async move {
-                worker.run_loop(handler.as_ref()).await
-            }));
+        if concurrency == 1 {
+            self.run_loop(handler.as_ref()).await;
+            return Ok(());
         }
-
-        for task in tasks {
-            task.await
-                .map_err(|error| Error::Job(format!("worker task panicked: {error}")))?;
-        }
-        Ok(())
+        self.run_batch_loop(handler, concurrency).await
     }
 
-    /// The single-job-at-a-time poll/process loop `run` spawns
-    /// `concurrency` copies of. Never returns under normal operation — see
-    /// `run`'s doc comment.
+    /// The `concurrency > 1` dispatcher: ONE poll in flight at a time,
+    /// asking `job-take-batch` for exactly the number of free slots, then
+    /// running those jobs concurrently.
+    ///
+    /// Deliberately not one poll loop per slot: RunPod reads every
+    /// `job-take` call as "this worker is available". With a loop per slot,
+    /// the idle ones keep polling while a job runs, so RunPod dispatches
+    /// more work to a busy worker and scales it down after the endpoint's
+    /// idle timeout — which killed every job longer than that timeout in
+    /// moss-tts production (2026-09-22). One poll at a time, sized to the
+    /// free slots and flagged with `job_in_progress`, is what RunPod's own
+    /// Python worker does.
+    async fn run_batch_loop<H, Fut>(&self, handler: Arc<H>, concurrency: usize) -> Result<()>
+    where
+        H: Fn(WorkerJob) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = std::result::Result<Value, String>> + Send + 'static,
+    {
+        let mut running: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+        loop {
+            let free = concurrency.saturating_sub(running.len());
+            if free == 0 {
+                // Every slot is busy: wait for one to finish rather than
+                // polling RunPod (which would advertise this worker as idle).
+                running.join_next().await;
+                continue;
+            }
+
+            let jobs = match self.take_jobs(free, !running.is_empty()).await {
+                Ok(jobs) => jobs,
+                Err(error) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(target: TRACING_TARGET, error = %error, "failed to take RunPod jobs");
+                    #[cfg(not(feature = "tracing"))]
+                    let _ = &error;
+                    Vec::new()
+                }
+            };
+
+            if jobs.is_empty() {
+                if running.is_empty() {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                } else {
+                    // Let a running job finish before asking again.
+                    running.join_next().await;
+                }
+                continue;
+            }
+
+            for job in jobs {
+                let worker = self.clone();
+                let handler = Arc::clone(&handler);
+                running.spawn(async move {
+                    #[cfg(feature = "tracing")]
+                    tracing::info!(target: TRACING_TARGET, job_id = %job.id, "received RunPod worker job");
+                    worker.mark_job_active(&job.id);
+                    let result = match handler(job.clone()).await {
+                        Ok(output) => WorkerJobResult::output(output),
+                        Err(error) => WorkerJobResult::error(error),
+                    };
+                    let post_result = worker.post_result(&job, &result, false).await;
+                    worker.mark_job_inactive(&job.id);
+                    if let Err(error) = post_result {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(target: TRACING_TARGET, error = %error, "failed to post RunPod job result");
+                        #[cfg(not(feature = "tracing"))]
+                        let _ = &error;
+                    }
+                });
+            }
+        }
+    }
+
+    /// Takes up to `batch_size` jobs in one `job-take-batch` call. An empty
+    /// vector means RunPod had nothing queued for this worker.
+    async fn take_jobs(&self, batch_size: usize, job_in_progress: bool) -> Result<Vec<WorkerJob>> {
+        let job_in_progress = job_in_progress
+            || self
+                .active_jobs
+                .lock()
+                .map(|jobs| !jobs.is_empty())
+                .unwrap_or(false);
+        let url = batch_job_url(&self.config.get_job_url);
+        let url = append_query(&url, "batch_size", &batch_size.to_string());
+        let url = append_query(
+            &url,
+            "job_in_progress",
+            if job_in_progress { "1" } else { "0" },
+        );
+        let mut request = self.client.get(url);
+        if let Some(api_key) = &self.config.api_key {
+            request = request.header("Authorization", api_key);
+        }
+
+        let response = request.send().await?;
+        match response.status().as_u16() {
+            204 | 400 => Ok(Vec::new()),
+            429 => {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                Ok(Vec::new())
+            }
+            _ => {
+                let response = response.error_for_status()?;
+                Ok(response.json::<Vec<WorkerJob>>().await.unwrap_or_default())
+            }
+        }
+    }
+
+    /// The single-job-at-a-time poll/process loop used at `concurrency == 1`.
+    /// Never returns under normal operation — see `run`'s doc comment.
     ///
     /// Prefetches the next job (`take_job(true)`, `job_in_progress=true` —
     /// RunPod's own sanctioned "I'm still busy, but tell me what's next"
@@ -424,6 +521,16 @@ impl ServerlessWorker {
                 tokio::time::sleep(interval).await;
             }
         });
+    }
+}
+
+/// `.../job-take/<worker>?query` -> `.../job-take-batch/<worker>?query`,
+/// matching RunPod's batch endpoint (the single-job URL is what the worker
+/// environment provides).
+fn batch_job_url(url: &str) -> String {
+    match url.split_once("/job-take/") {
+        Some((head, tail)) => format!("{head}/job-take-batch/{tail}"),
+        None => url.to_owned(),
     }
 }
 
