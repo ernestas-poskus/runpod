@@ -134,6 +134,10 @@ pub struct ServerlessWorker {
     active_jobs: Arc<Mutex<Vec<String>>>,
 }
 
+/// How soon the batch dispatcher polls again after an empty poll while jobs
+/// are still running, instead of blocking until one finishes.
+const EMPTY_POLL_RETRY: Duration = Duration::from_millis(500);
+
 impl ServerlessWorker {
     /// Create a worker from explicit configuration.
     pub fn new(config: WorkerConfig) -> Result<Self> {
@@ -227,8 +231,25 @@ impl ServerlessWorker {
                 if running.is_empty() {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 } else {
-                    // Let a running job finish before asking again.
-                    running.join_next().await;
+                    // A slot is free but this poll came back empty. Waiting
+                    // for a running job to finish before asking again leaves
+                    // that slot idle for a whole job: `job-take-batch` hands
+                    // out fewer jobs than requested whenever queue visibility
+                    // lags submission, so a worker can sit at partial
+                    // occupancy with work queued. Measured on moss-tts
+                    // (2026-09-30): six jobs on a 3-slot worker were taken
+                    // 2, then 3, then 1, the last one running alone after a
+                    // 147 s delay — 4.98 aggregate RTF where three
+                    // simultaneous jobs reached 8.52.
+                    //
+                    // So retry soon instead, racing the retry against a
+                    // completion. Both arms are cancel-safe, and the poll
+                    // still carries `job_in_progress`, which is what keeps
+                    // RunPod from reading a busy worker as idle.
+                    tokio::select! {
+                        _ = tokio::time::sleep(EMPTY_POLL_RETRY) => {}
+                        _ = running.join_next() => {}
+                    }
                 }
                 continue;
             }

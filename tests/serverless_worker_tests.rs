@@ -527,3 +527,100 @@ async fn worker_run_takes_jobs_in_one_batch_call_when_concurrency_is_above_one()
     ids.sort();
     assert_eq!(ids, vec!["job-1".to_string(), "job-2".to_string()]);
 }
+
+#[tokio::test]
+async fn worker_refills_a_free_slot_without_waiting_for_a_running_job() {
+    // `job-take-batch` returns fewer jobs than requested whenever queue
+    // visibility lags submission. The dispatcher must poll again shortly
+    // after such a partial batch, not block on a completion: blocking left
+    // moss-tts workers at partial occupancy with work queued (2026-09-30,
+    // six jobs on a 3-slot worker taken 2/3/1, aggregate RTF 4.98 against
+    // 8.52 for three simultaneous jobs).
+    let server = MockServer::start().await;
+    let config = WorkerConfig {
+        worker_id: "worker-1".to_string(),
+        get_job_url: format!("{}/job-take/worker-1?token=abc", server.uri()),
+        post_output_url: format!("{}/job-done/$ID?token=abc", server.uri()),
+        ping_url: None,
+        api_key: None,
+        concurrency: 3,
+        ping_interval: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(5),
+    };
+    let worker = ServerlessWorker::new(config).unwrap();
+
+    // First poll: one job for three free slots.
+    Mock::given(method("GET"))
+        .and(path("/job-take-batch/worker-1"))
+        .and(query_param("job_in_progress", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"id": "job-1", "input": {}}
+        ])))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    // The next poll finds nothing: this is the state the old dispatcher got
+    // stuck in, blocking on a completion instead of asking again.
+    Mock::given(method("GET"))
+        .and(path("/job-take-batch/worker-1"))
+        .and(query_param("job_in_progress", "1"))
+        .respond_with(ResponseTemplate::new(204))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    // Then the queue becomes visible. Only a dispatcher that re-polls on its
+    // own sees this — job-1 outlives the test window.
+    Mock::given(method("GET"))
+        .and(path("/job-take-batch/worker-1"))
+        .and(query_param("job_in_progress", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"id": "job-2", "input": {}},
+            {"id": "job-3", "input": {}}
+        ])))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/job-take-batch/worker-1"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/job-done/job-1"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let handler_seen = Arc::clone(&seen);
+    let worker_task = tokio::spawn(async move {
+        worker
+            .run(move |job| {
+                let seen = Arc::clone(&handler_seen);
+                async move {
+                    seen.lock().unwrap().push(job.id.clone());
+                    // Longer than the test window: a dispatcher that waits
+                    // for a completion before re-polling never sees job-2.
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                    Ok(json!({"ok": true}))
+                }
+            })
+            .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(1_500)).await;
+    worker_task.abort();
+
+    let mut ids = seen.lock().unwrap().clone();
+    ids.sort();
+    assert_eq!(
+        ids,
+        vec![
+            "job-1".to_string(),
+            "job-2".to_string(),
+            "job-3".to_string()
+        ],
+        "a free slot must be refilled while another job is still running"
+    );
+}
